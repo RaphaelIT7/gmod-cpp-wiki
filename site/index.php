@@ -7,7 +7,7 @@
         'missing_page' => 'missing.md',
         'pages_path' => 'pages/',
         'issues_url' => 'https://github.com/Facepunch/garrysmod-issues/issues/',
-        'code_language' => 'lua', // lua or c++
+        'code_language' => 'c++', // lua or c++
     );
 
     $categories = array(
@@ -22,21 +22,51 @@
             ),
         ),
         array(
-            'name' => 'Developer Reference', 
+            'name' => 'C++', 
+            'categories' => array(
+                array(
+                    'mdi' => 'mdi-code-array',
+                    'name' => 'Types',
+                    'path' => 'cpp/types',
+                    'tags' => 'true',
+                ),
+            ),
+        ),
+        array(
+            'name' => 'SourceSDK-Minimal', 
             'categories' => array(
                 array(
                     'mdi' => 'mdi-code-braces',
                     'name' => 'Globals',
-                    'path' => 'globals'
+                    'path' => 'sourcesdk-minimal/globals',
+                    'tags' => 'false',
                 ),
                 array(
                     'mdi' => 'mdi-book',
                     'name' => 'Classes',
-                    'path' => 'classes'
+                    'path' => 'sourcesdk-minimal/classes',
+                    'tags' => 'true',
+                ),
+            ),
+        ),
+        array(
+            'name' => 'Source Engine', 
+            'categories' => array(
+                array(
+                    'mdi' => 'mdi-code-array',
+                    'name' => 'Structures',
+                    'path' => 'sourceengine/structures',
+                    'tags' => 'true',
                 ),
             ),
         ),
     );
+
+    if ($config['code_language'] == 'c++') {
+        $config['code_funcseparator'] = '::';
+    } elseif ($config['code_language'] == 'lua') {
+        $config['code_funcseparator'] = ':';
+    }
 
     $Parsedown = new Extension();
     $Parsedown->config = $config;
@@ -68,8 +98,9 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title><?php echo $title; ?> - <?php echo $config['name']; ?></title>
         <link rel="icon" type="image/png" href="https://files.facepunch.com/garry/822e60dc-c931-43e4-800f-cbe010b3d4cc.png">
-        <link rel="search" title="Garry&#x27;s Mod Wiki" type="application/opensearchdescription+xml" href="https://wiki.facepunch.com/gmod/~searchmanifest" />
-        <script href="https://wiki.facepunch.com/cdn-cgi/apps/head/JodREY1zTjWBVnPepvx61z0haaQ.js"></script><link rel="stylesheet" href="https://wiki.facepunch.com/styles/gmod.css?n=7fe51698-72dd-4fa7-aee6-7942d119990a" />
+        <link rel="search" title="<?php echo $config['name']; ?>" type="application/opensearchdescription+xml" href="https://wiki.facepunch.com/gmod/~searchmanifest" />
+        <script href="https://wiki.facepunch.com/cdn-cgi/apps/head/JodREY1zTjWBVnPepvx61z0haaQ.js"></script>
+        <link rel="stylesheet" href="https://wiki.facepunch.com/styles/gmod.css?n=7fe51698-72dd-4fa7-aee6-7942d119990a" />
         <script src="https://wiki.facepunch.com/script.js?n=7fe51698-72dd-4fa7-aee6-7942d119990a"></script>
         <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 
@@ -188,7 +219,8 @@
                                     if (is_dir($path . $page)) {
                                         echo '<details class="level2 cm type e">';
                                             echo '<summary>';
-                                                echo '<a class="cm type e" href="/?page=' . $page . '">' . $page . '</a>';
+                                                $categoryfile = file_get_contents($path . '/' . $page . '/' . $page . '.md');
+                                                echo '<a class="' . $Parsedown->GetTags($categoryfile) . '" href="/?page=' . $page . '">' . $page . '</a>';
                                             echo '</summary>';
                                             echo '<ul>';
                                                 $fullpath = $path . $page;
@@ -200,18 +232,21 @@
                                                     $page2 = substr($page2, 0, strripos($page2, '.'));
 
                                                     echo '<li>';
-                                                        echo '<a class="cm f method member ' . $Parsedown->LableRealm($file) . '" href="/?page=' . $page2 . '" search="' . $pagetitle . '">' . $pagetitle . '</a>';
+                                                        echo '<a class="' . $Parsedown->GetTags($file) . '" href="/?page=' . $page2 . '" search="' . $pagetitle . '">' . $pagetitle . '</a>';
                                                     echo '</li>';
                                                 }
                                             echo '</ul>';
                                         echo '</details>';
                                     } else {
+                                        $file = file_get_contents($path . '/' . $page);
                                         $page = substr($page, 0, strripos($page, '.'));
 
-                                        echo '<a class="" href="/?page=' . $page . '" search="' . $page . '">' . $page . '</a>';
+                                        echo '<a class="' . (isset($chapter['tags']) ? $Parsedown->GetTags($file) : '') . '" href="/?page=' . $page . '" search="' . $page . '">' . $page . '</a>';
                                     }
+
                                     echo '</li>';
                                 }
+
                                 echo '</ul>';
                                 echo '</details>';
                             }
@@ -394,7 +429,7 @@
     } elseif ($_GET["format"] === 'html') {
         echo $Parsedown->text($file);
     } elseif ($_GET["format"] === 'json') {
-        //echo '{"title":"' . $title .'","wikiName":"' . $config['name'] . '","wikiIcon":"https://files.facepunch.com/garry/822e60dc-c931-43e4-800f-cbe010b3d4cc.png","wikiUrl":"gmod","address":"' . (isset($_GET["page"]) ? $_GET["page"] : '') . '","createdTime":"2020-01-21T17:09:42.1+00:00","updateCount":0,"markup":"' . $file . '","html":"' . $Parsedown->text($file) . '","footer":"Page views: 50,198\u003Cbr\u003EUpdated: A Long Time Ago","revisionId":545993,"pageLinks":[{"url":"/gmod/Global.CreateSound","label":"View","icon":"file","description":""},{"url":"/gmod/Global.CreateSound~edit","label":"Edit","icon":"pencil","description":""},{"url":"/gmod/Global.CreateSound~history","label":"History","icon":"history","description":""}]}';
+        //echo '{"title":"' . $title .'","wikiName":"' . $config['name'] . '","wikiIcon":"https://files.facepunch.com/garry/822e60dc-c931-43e4-800f-cbe010b3d4cc.png","wikiUrl":"gmod","address":"' . (isset($_GET["page"]) ? $_GET["page"] : '') . '","createdTime":"2020-01-21T17:09:42.1+00:00","updateCount":0,"markup":"' . $file . '","html":"' . $Parsedown->text($file) . '","footer":"","revisionId":0,"pageLinks":[{"url":"/gmod/Global.CreateSound","label":"View","icon":"file","description":""},{"url":"","label":"Edit","icon":"pencil","description":""},{"url":"","label":"History","icon":"history","description":""}]}';
     }
 
     endif;

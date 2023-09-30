@@ -14,4 +14,4 @@ This wiki is unofficial and based off the original [Gmod Wiki](https://wiki.face
 - [x] Add < ambig >
 - [x] Add < internal >
 - [x] Add < validate >
-- [ ] Add labels and realms
+- [x] Add labels and realms

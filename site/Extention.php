@@ -35,6 +35,8 @@
         # Utilities
         #
         function FindFile($file) {
+            $file = $this->SafeLink($file);
+
             foreach($this->categories as &$category) {
                 foreach ($category['categories'] as &$chapter) {
                     $shortpath = $this->config['pages_path'] . $chapter['path'] . '/';
@@ -52,10 +54,22 @@
 
                     if (file_exists($path))
                     {
+                        $filec = file_get_contents($path);
+                        if (preg_match('/<alias>(.*?)<\/alias>/', $filec, $matches)) {
+                            $path = $shortpath  . $matches[1] . '.md';
+                        }
+
                         return $path;
                     }
                 }
             }
+        }
+
+        function SafeLink($url) {
+            $url = str_replace('*', '', $url); // Removes all *
+            $url = str_replace(' ', '_', $url); // Removes all *
+
+            return $url;
         }
 
         function PageTitle($text)
@@ -67,6 +81,10 @@
 
             if (preg_match('/<function name="([^"]+)" parent="([^"]+)" type="([^"]+)">([\s\S]+?)<\/function>/s', $text, $matches)) {
                  $title = $matches[1];
+            }
+
+            if (preg_match('/<type name="([^"]+)" category="([^"]+)" is="([^"]+)">([\s\S]+?)<\/type>/s', $text, $matches)) {
+                $title = $matches[1];
             }
 
             return $title;
@@ -90,11 +108,62 @@
             return $title;
         }
 
+        function GetTags($text)
+        {
+            $tags = '';
+            if (preg_match('/<function name="([^"]+)" parent="([^"]+)" type="([^"]+)">([\s\S]+?)<\/function>/s', $text, $matches)) {
+                if (isset($matches[3]) && $matches[3] != '') {
+                    if ($matches[3] == 'classfunc') {
+                        $tags .= 'cm f method member';
+                    }
+                }
+
+                if (preg_match('/<realm>(.*?)<\/realm>/s', $text, $matches2)) {
+                    $realm = $matches2[1];
+
+                    if (strlen($tags) != 0) {
+                        $tags .= ' ';
+                    }
+                    if ($realm === 'Client and Menu') {
+                        $tags .= 'rc rm';
+                    } elseif ($realm === 'Menu') {
+                        $tags .= 'rm';
+                    } elseif ($realm === 'Client') {
+                        $tags .= 'rc';
+                    } elseif ($realm === 'Server') {
+                        $tags .= 'rs';
+                    } elseif ($realm === 'Shared') {
+                        $tags .= 'rs rc';
+                    } elseif ($realm === 'Shared and Menu') {
+                        $tags .= 'rs rc rm';
+                    }
+                }
+            } else {
+                $tags .= 'cm e';
+            }
+
+            if (preg_match('/<deprecated>(.*?)<\/deprecated>/', $text, $matches)) {
+                if (strlen($tags) != 0) {
+                    $tags .= ' ';
+                }
+                $tags .= 'depr';
+            }
+
+            if (preg_match_all('/<internal>(.*?)<\/internal>/', $text, $matches)) {
+                if (strlen($tags) != 0) {
+                    $tags .= ' ';
+                }
+                $tags .= 'intrn';
+            }
+
+            return $tags;
+        }
+
         function LableRealm($text) 
         {
             if (preg_match('/<function name="([^"]+)" parent="([^"]+)" type="([^"]+)">([\s\S]+?)<\/function>/s', $text, $matches)) {
-                if (preg_match('/<realm>(.*?)<\/realm>/s', $text, $matches)) {
-                    $realm = $matches[1];
+                if (preg_match('/<realm>(.*?)<\/realm>/s', $text, $matches2)) {
+                    $realm = $matches2[1];
 
                     if ($realm === 'Client and Menu') {
                         return 'rc rm';
@@ -112,6 +181,45 @@
                 } else {
                     return '';
                 }
+            }
+
+            return '';
+        }
+
+        function FuncData($text) 
+        {
+            if (preg_match('/<function name="([^"]+)" parent="([^"]+)" type="([^"]+)">([\s\S]+?)<\/function>/s', $text, $matches)) {
+                $function = array();
+                $function['name'] = $matches[1];
+                $function['parent'] = $matches[2];
+                $function['type'] = $matches[3];
+
+                $textContent = $matches[4];
+
+                if (preg_match('/<description>\s*(.*?)\s*<\/description>/s', $text, $matches)) {
+                    $function['desc'] = $matches[1];
+                }
+
+                if (preg_match('/<source>\s*(.*?)\s*<\/source>/s', $text, $matches)) {
+                    $function['source'] = $matches[1];
+                }
+
+                #if (preg_match('/<realm>(.*?)<\/realm>/s', $text, $matches)) {
+                #    $this->getrealm($matches[1]);
+                #} else {
+                #    $function['realm'] = '';
+                #    $function['realmdesc'] = "No";
+                #}
+
+                if (preg_match('/<args>(.*?)<\/args>/s', $text, $matches)) {
+                    $function['args'] = $this->GetStuff($matches[1], 'args', 'arg');
+                }
+
+                if (preg_match('/<rets>(.*?)<\/rets>/s', $text, $matches)) {
+                    $function['rets'] = $this->GetStuff($matches[1], 'rets', 'ret');
+                }
+
+                return $function;
             }
 
             return '';
@@ -143,8 +251,6 @@
 
             return $Block;
         }
-
-        private $function = array();
         protected function buildFunction($func)
         {
             $html = '<div class="function ' . $func['type'] . ' ' . $func['realm'] . '">';
@@ -167,7 +273,7 @@
                                 $args .= ',';
                             }
 
-                            $args .= ' ' . '<a class="link-page ' . ($this->FindFile($func['parent']) != null ? 'exists' : 'missing') . '" href="/?page=' . $arg['type'] . '">' . $arg['type'] . '</a>' . ' ' . $arg['name'];
+                            $args .= ' ' . '<a class="link-page ' . ($this->FindFile($arg['type']) != null ? 'exists' : 'missing') . '" href="/?page=' . $this->SafeLink($arg['type']) . '">' . $arg['type'] . '</a>' . ' ' . $arg['name'];
 
                             if (isset($arg['default']) && $arg['default'] !== '')
                             {
@@ -182,17 +288,17 @@
                                 $rets .= ',';
                             }
 
-                            $rets .= ' ' . '<a class="link-page ' . ($this->FindFile($func['parent']) != null ? 'exists' : 'missing') . '" href="/?page=' . $ret['type'] . '">' . $ret['type'] . '</a>';
+                            $rets .= ' ' . '<a class="link-page ' . ($this->FindFile($ret['type']) != null ? 'exists' : 'missing') . '" href="/?page=' . $this->SafeLink($ret['type']) . '">' . $ret['type'] . '</a>';
 
-                            if (isset($ret['default']) && $ret['default'] !== '')
-                            {
-                                $rets .= ' = ' . $ret['default'];
-                            }
+                            #if (isset($ret['default']) && $ret['default'] !== '')
+                            #{
+                            #    $rets .= ' = ' . $ret['default'];
+                            #}
                         }
 
-                        $html .= $rets . ' ' . (isset($func['parent']) ? $func['parent'] . ':' : '') . $func['name'] . '(' . $args .' )';
+                        $html .= $rets . ' ' . (isset($func['parent']) ? $func['parent'] . $this->config['code_funcseparator'] : '') . $func['name'] . '(' . $args .' )';
                     } else {
-                        $html .= ' ' . (isset($func['parent']) ? $func['parent'] . ':' : '') .$func['name'] . "()";
+                        $html .= ' ' . (isset($func['parent']) ? $func['parent'] . $this->config['code_funcseparator'] : '') .$func['name'] . "()";
                     }
                 $html .= '</div>';
 
@@ -225,7 +331,7 @@
                         $i = $i + 1;
                         $html .='<div>';
                             $html .= '<span class="numbertag">' . $i . '</span>';
-                            $html .= '<a class="link-page ' . ($this->FindFile($func['parent']) != null ? 'exists' : 'missing') . ' href="/?page=' . $arg['type'] . '">' . $arg['type'] . '</a>';
+                            $html .= '<a class="link-page ' . ($this->FindFile($arg['type']) != null ? 'exists' : 'missing') . '" href="/?page=' . $this->SafeLink($arg['type']) . '">' . $arg['type'] . '</a>';
                             $html .= '<span class="name"> ' . $arg['name'] . '</span>';
                             if(isset($arg['default']) && $arg['default'] != '') {
                                 $html .= '<span class="default"> = ' . $arg['default'] . '</span>';
@@ -248,7 +354,7 @@
                         $i = $i + 1;
                         $html .='<div>';
                             $html .= '<span class="numbertag">' . $i . '</span>';
-                            $html .= '<a class="link-page ' . ($this->FindFile($func['parent']) != null ? 'exists' : 'missing') . ' href="/?page=' . $arg['type'] . '">' . $arg['type'] . '</a>';
+                            $html .= '<a class="link-page ' . ($this->FindFile($arg['type']) != null ? 'exists' : 'missing') . '" href="/?page=' . $this->SafeLink($arg['type']) . '">' . $arg['type'] . '</a>';
                             $html .= '<span class="name"> ' . $arg['name'] . '</span>';
                             if(isset($arg['default']) && $arg['default'] != '') {
                                 $html .= '<span class="default"> = ' . $arg['default'] . '</span>';
@@ -265,11 +371,112 @@
             return $html;
         }
 
+        protected function buildType($type)
+        {
+            $html = '<div class="type">';
+                $html .= $this->text($type['summ']);
+                #$html .= '<div class="section">';
+                #    $html .= $this->text($type['summ']);
+                #$html .= '</div>';
+                $html .= '<div class="members">';
+                    $html .= '<h1>Methods</h1>';
+                    $html .= '<div class="section">';
+                        $page = $_GET['page'];
+                        $path = $this->FindFile($page);
+                        if (isset($path) && $path != '') {
+                            $path = substr($path, 0, strripos($path, '/'));
+                            $files = array_diff(scandir($path), array('..', '.', $page. '.md'));
+                            foreach($files as &$page2) {
+                                $file = file_get_contents($path . '/' . $page2);
+                                $pagetitle = $this->PageTitle($file); 
+
+                                $page2 = substr($page2, 0, strripos($page2, '.'));
+
+                                $func = $this->FuncData($file);
+                                $func['args'] = isset($func['args']) ? $func['args'] : array();
+                                $func['rets'] = isset($func['rets']) ? $func['rets'] : array();
+
+                                $html .= '<div class="member_line">';
+
+                                    $func['name'] = '<a class="subject" href="?page=' . $page2 . '">' . $func['name'] . '</a>';
+
+                                    if (sizeof($func['args']) != 0 || sizeof($func['rets']) != 0) {
+                                        $args = '';
+                                        foreach ($func['args'] as $arg) {
+                                            if (! str_ends_with($args, ',') && $args !== '')
+                                            {
+                                                $args .= ',';
+                                            }
+
+                                            $args .= ' ' . '<a class="link-page ' . ($this->FindFile($arg['type']) != null ? 'exists' : 'missing') . '" href="/?page=' . $this->SafeLink($arg['type']) . '">' . $arg['type'] . '</a>' . ' ' . $arg['name'];
+
+                                            if (isset($arg['default']) && $arg['default'] !== '')
+                                            {
+                                                $args .= ' = ' . $arg['default'];
+                                            }
+                                        }
+
+                                        $rets = '';
+                                        foreach ($func['rets'] as $ret) {
+                                            if (! str_ends_with($rets, ',') && $rets !== '')
+                                            {
+                                                $rets .= ',';
+                                            }
+
+                                            $rets .= ' ' . '<a class="link-page ' . ($this->FindFile($ret['type']) != null ? 'exists' : 'missing') . '" href="/?page=' . $this->SafeLink($ret['type']) . '">' . $ret['type'] . '</a>';
+                                        }
+
+                                        $html .= $rets . ' ' . (isset($func['parent']) ? $func['parent'] . $this->config['code_funcseparator'] : '') . $func['name'] . '(' . $args .' )';
+                                    } else {
+                                        $html .= (isset($func['parent']) ? $func['parent'] . $this->config['code_funcseparator'] : '') . $func['name'] . "()";
+                                    }
+                                    $html .= '<div class="summary">';
+                                        $html .= $func['desc'];
+                                    $html .= '</div>';
+                                $html .= '</div>';
+                            }
+                        }
+                    $html .= '</div>';
+                $html .= '</div>';
+            $html .= '</div>';
+
+            return $html;
+        }
+
+        protected function buildStructure($structure) {
+            $html = '<div class="struct">';
+                $html .= '<h1>Description</h1>';
+                $html .= '<div class="struct_description section">';
+                    $html .= $this->text($structure['desc']);
+                $html .= '</div>';
+                $html .= '<h1>Parameters</h1>';
+                $html .= '<div class="section">';
+                    foreach ($structure['fields'] as $field) {
+                        $html .='<div class="parameter">';
+                            $html .= '<a class="link-page ' . ($this->FindFile($field['type']) != null ? 'exists' : 'missing') . '" href="/?page=' . $this->SafeLink($field['type']) . '">' . $field['type'] . '</a>';
+                            $html .= '<strong> ' . $field['name'] . '</strong>';
+                            $html .= '<div class="description numbertagindent">';
+                                $html .= $this->text($field['desc']);
+                                if(isset($field['default']) && $field['default'] != '') {
+                                    $html .= '<p>';
+                                        $html .= '<strong>Default:</strong>';
+                                        $html .= '<code>' . $field['default'] . '</code>';
+                                    $html .= '</p>';
+                                }
+                            $html .= '</div>';
+                        $html .= '</div>';
+                    }
+                $html .= '</div>';
+            $html .= '</div>';
+
+            return $html;
+        }
+
         protected function buildNote($text)
         {
             $html = '<div class="note">';
                 $html .= '<div class="inner">';
-                    $html .= $text;
+                    $html .= $this->text($text);
                 $html .= '</div>';
             $html .= '</div>';
 
@@ -280,7 +487,7 @@
         {
             $html = '<div class="warning">';
                 $html .= '<div class="inner">';
-                    $html .= $text;
+                    $html .= $this->text($text);
                 $html .= '</div>';
             $html .= '</div>';
 
@@ -351,13 +558,13 @@
             return $html;
         }
 
-        protected function buildPageURL($page)
+        protected function buildPageURL($page, $name)
         {
             $file = $this->FindFile($page);
             $html = '<a class="link-page ' . (isset($file) ? 'exists' : 'missing') . '" href="';
             $html .= "/?page=" . $page;
             $html .= '">';
-                $html .= $page;
+                $html .= isset($name) && $name != '' ? $name : $page;
             $html .= '</a>';
 
             return $html;
@@ -427,7 +634,7 @@
                             $code = preg_replace('/\b' . preg_quote($keyword, '/') . '\b/', '<span class="keyword">' . $keyword . '</span>', $code);
                         }
 
-                        $code = preg_replace('///(.*?)\n/', '<span class="comment">//$1</span>', $code);
+                        $code = preg_replace('/\/\/(.*?)\n/', '<span class="comment">//$1</span>', $code);
                         $code = preg_replace('#/\*(.*?)\*/#s', '<span class="multiline-comment">/* $1 */</span>', $code);
                     }
 
@@ -445,38 +652,46 @@
 
         function getrealm($realm) 
         {
+            $data = array();
             if ($realm === 'Client and Menu') {
-                $this->function['realm'] = 'realm-client realm-menu';
-                $this->function['realmdesc'] = "This function is available in client and menu state(s)";
+                $data['realm'] = 'realm-client realm-menu';
+                $data['realmdesc'] = "This function is available in client and menu state(s)";
             } elseif ($realm === 'Menu') {
-                $this->function['realm'] = 'realm-menu';
-                $this->function['realmdesc'] = "This function is available in menu state";
+                $data['realm'] = 'realm-menu';
+                $data['realmdesc'] = "This function is available in menu state";
             } elseif ($realm === 'Client') {
-                $this->function['realm'] = 'realm-client';
-                $this->function['realmdesc'] = "This function is available in client state";
+                $data['realm'] = 'realm-client';
+                $data['realmdesc'] = "This function is available in client state";
             } elseif ($realm === 'Server') {
-                $this->function['realm'] = 'realm-server';
-                $this->function['realmdesc'] = "This function is available in server state";
+                $data['realm'] = 'realm-server';
+                $data['realmdesc'] = "This function is available in server state";
             } elseif ($realm === 'Shared') {
-                $this->function['realm'] = 'realm-client realm-server';
-                $this->function['realmdesc'] = "This function is available in client and server state(s)";
+                $data['realm'] = 'realm-client realm-server';
+                $data['realmdesc'] = "This function is available in client and server state(s)";
             } elseif ($realm === 'Shared and Menu') {
-                $this->function['realm'] = 'realm-client realm-server realm-menu';
-                $this->function['realmdesc'] = "This function is available in client, server and menu state(s)";
+                $data['realm'] = 'realm-client realm-server realm-menu';
+                $data['realmdesc'] = "This function is available in client, server and menu state(s)";
             }
+
+            return $data;
         }
 
         function GetStuff($text, $name, $prefix)
         {
             $ret = array();
 
-            preg_match_all('/<' . $prefix . ' name="([^"]*)" type="([^"]+)"(?: default="([^"]+)")?>(.*?)<\/' . $prefix . '>/s', $text, $matches, PREG_SET_ORDER);
+            preg_match_all('/<' . $prefix . ' name="([^"]*)" type="([^"]+)"(?: default="([^"]*)")?>(.*?)<\/' . $prefix . '>/s', $text, $matches, PREG_SET_ORDER);
 
             foreach ($matches as $match) {
                 $name = $match[1];
                 $type = $match[2];
                 $default = isset($match[3]) ? $match[3] : null;
                 $desc = trim($match[4]);
+
+                if (isset($default) && $default == ' ')
+                {
+                    $default = '""';
+                }
 
                 $aArray = array(
                     'name' => $name,
@@ -501,7 +716,7 @@
             $lines = explode("\n", $text);
 
             foreach ($lines as &$line) {
-                if (!preg_match('/^#/', $line) && preg_match('/\s{2}$/', $line)) {
+                if (!preg_match('/^#/', $line) && preg_match('/\s{4}$/', $line)) {
                     $line .= '<br>';
                 }
             }
@@ -578,56 +793,103 @@
                 }
             }
 
-            if (preg_match_all('/```([a-zA-Z0-9_-]*)\n(.*?)\n```/s', $text, $matches, PREG_SET_ORDER)) {
-                foreach ($matches as $match) {
-                    $text = str_replace('```' . $match[1] . '\n' . $match[2] . '```', $this->buildCode($match[1], $match[2]), $text);
-                }
-            }
+            #if (preg_match_all('/```([a-zA-Z0-9_-]*)\n(.*?)\n```/s', $text, $matches, PREG_SET_ORDER)) {
+                #foreach ($matches as $match) {
+                    #$text = str_replace('```' . $match[1] . '\n' . $match[2] . '```', $this->buildCode($match[1], $match[2]), $text);
+                #}
+            #}
 
             if (preg_match_all('/<page(?:\s+text="([^"]*)")?>([^<]+)<\/page>/', $text, $matches, PREG_SET_ORDER)) {
                 foreach ($matches as $match) {
                     if (isset($match[1]) && $match[1] != '') {
-                        $rep = '<page text=' . $match[1] . '>' . $match[2] . '</page>';
+                        $rep = '<page text="' . $match[1] . '">' . $match[2] . '</page>';
                     } else {
                         $rep = '<page>' . $match[2] . '</page>';
                     }
-                    $text = str_replace($rep, $this->buildPageURL($match[2]), $text);
+                    $text = str_replace($rep, $this->buildPageURL($match[2], $match[1]), $text);
                 }
             }
 
             $special = false;
             if (preg_match('/<function name="([^"]+)" parent="([^"]+)" type="([^"]+)">([\s\S]+?)<\/function>/s', $text, $matches)) {
                 $special = true;
-                $this->function['name'] = $matches[1];
-                $this->function['parent'] = $matches[2];
-                $this->function['type'] = $matches[3];
+                $function = array();
+                $function['name'] = $matches[1];
+                $function['parent'] = $matches[2];
+                $function['type'] = $matches[3];
 
                 $textContent = $matches[4];
 
                 if (preg_match('/<description>\s*(.*?)\s*<\/description>/s', $text, $matches)) {
-                    $this->function['desc'] = $matches[1];
+                    $function['desc'] = $matches[1];
                 }
 
                 if (preg_match('/<source>\s*(.*?)\s*<\/source>/s', $text, $matches)) {
-                    $this->function['source'] = $matches[1];
+                    $function['source'] = $matches[1];
                 }
 
                 if (preg_match('/<realm>(.*?)<\/realm>/s', $text, $matches)) {
-                    $this->getrealm($matches[1]);
+                    $data = $this->getrealm($matches[1]);
+                    $function['realm'] = $data['realm'];
+                    $function['realmdesc'] = $data['realmdesc'];
                 } else {
-                    $this->function['realm'] = '';
-                    $this->function['realmdesc'] = "No";
+                    $function['realm'] = '';
+                    $function['realmdesc'] = "No";
                 }
 
                 if (preg_match('/<args>(.*?)<\/args>/s', $text, $matches)) {
-                    $this->function['args'] = $this->GetStuff($matches[1], 'args', 'arg');
+                    $function['args'] = $this->GetStuff($matches[1], 'args', 'arg');
                 }
 
                 if (preg_match('/<rets>(.*?)<\/rets>/s', $text, $matches)) {
-                    $this->function['rets'] = $this->GetStuff($matches[1], 'rets', 'ret');
+                    $function['rets'] = $this->GetStuff($matches[1], 'rets', 'ret');
                 }
 
-                $markup .= $this->buildFunction($this->function);
+                $markup .= $this->buildFunction($function);
+            }
+
+            if (preg_match('/<type name="([^"]+)" category="([^"]+)" is="([^"]+)">([\s\S]+?)<\/type>/s', $text, $matches)) {
+                $special = true;
+                $type = array();
+                $type['name'] = $matches[1];
+                $type['category'] = $matches[2];
+                $type['is'] = $matches[3];
+
+                $content = $matches[4];
+
+                if (preg_match('/<summary>\s*(.*?)\s*<\/summary>/s', $text, $matches2)) {
+                    $type['summ'] = $matches2[1];
+                }
+
+                $markup .= $this->buildType($type);
+            }
+
+            if (preg_match('/<structure>([\s\S]+?)<\/structure>/s', $text, $matches)) {
+                $special = true;
+                $structure = array();
+
+                if (preg_match('/<description>\s*(.*?)\s*<\/description>/s', $text, $matches)) {
+                    $structure['desc'] = $matches[1];
+                }
+
+                if (preg_match('/<source>\s*(.*?)\s*<\/source>/s', $text, $matches)) {
+                    $structure['src'] = $matches[1];
+                }
+
+                if (preg_match('/<realm>(.*?)<\/realm>/s', $text, $matches)) {
+                    $data = $this->getrealm($matches[1]);
+                    $structure['realm'] = $data['realm'];
+                    $structure['realmdesc'] = $data['realmdesc'];
+                } else {
+                    $structure['realm'] = '';
+                    $structure['realmdesc'] = "No";
+                }
+
+                if (preg_match('/<fields>(.*?)<\/fields>/s', $text, $matches)) {
+                    $structure['fields'] = $this->GetStuff($matches[1], 'fields', 'item');
+                }
+
+                $markup .= $this->buildStructure($structure);
             }
 
             if (preg_match_all('/<example>\s*<description>(.*?)<\/description>\s*<code>(.*?)<\/code>(?:\s*<output>(.*?)<\/output>)?\s*<\/example>/s', $text, $matches, PREG_SET_ORDER)) {
@@ -640,15 +902,6 @@
                         'desc' => parent::text(trim($match[1])),
                     ));
                 }
-            }
-
-            if (preg_match('/<type name="([^"]+)" category="([^"]+)" is="([^"]+)">([\s\S]+?)<\/type>/s', $text, $matches)) {
-                $type = array();
-                $type['name'] = $matches[1];
-                $type['category'] = $matches[2];
-                $type['is'] = $matches[3];
-
-                $content = $matches[4];
             }
 
             if (!$special) {
@@ -683,27 +936,6 @@
         private $desc = false;
         protected function blockMarkup($Line)
         {
-            if (preg_match('/^<description>/', $Line['text'])) {
-                $Block = array(
-                    'name' => 'description',
-                    'markup' => '',
-                );
-                return $Block;
-            }
-
-            if (preg_match('/<\/function>/i', $Line['text'], $matches)) {
-                $Block = array(
-                    'name' => 'function',
-                    'element' => array(
-                        'text' => $this->function,
-                        'handler' => 'blockFunction', // Custom handling function for <function> tags
-                        'rawHtml' => $Line['text'],
-                    ),
-                );
-
-                return $Block;
-            }
-
             $Block = parent::blockMarkup($Line);
 
             if (! isset($Block['name']))
@@ -717,6 +949,10 @@
             }
 
             return $Block;
+        }
+
+        protected function blockCode($Line, $Block = null)
+        {
         }
     }
 ?>
