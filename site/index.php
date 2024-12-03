@@ -220,7 +220,7 @@
                                         echo '<details class="level2 cm type e">';
                                             echo '<summary>';
                                                 $categoryfile = file_get_contents($path . '/' . $page . '/' . $page . '.md');
-                                                echo '<a class="' . $Parsedown->GetTags($categoryfile) . '" href="/?page=' . $page . '">' . $page . '</a>';
+                                                echo '<a class="' . $Parsedown->GetTags($categoryfile) . '" href="/?page=' . $page . '">' . $Parsedown->PageTitle($categoryfile) . '</a>';
                                             echo '</summary>';
                                             echo '<ul>';
                                                 $fullpath = $path . $page;
@@ -232,7 +232,7 @@
                                                     $page2 = substr($page2, 0, strripos($page2, '.'));
 
                                                     echo '<li>';
-                                                        echo '<a class="' . $Parsedown->GetTags($file) . '" href="/?page=' . $page2 . '" search="' . $pagetitle . '">' . $pagetitle . '</a>';
+                                                        echo '<a class="' . $Parsedown->GetTags($file) . '" href="/?page=' . $page2 . '" search="' . $pagetitle . '">' . $Parsedown->PageTitle($file) . '</a>';
                                                     echo '</li>';
                                                 }
                                             echo '</ul>';
@@ -241,7 +241,7 @@
                                         $file = file_get_contents($path . '/' . $page);
                                         $page = substr($page, 0, strripos($page, '.'));
 
-                                        echo '<a class="' . (isset($chapter['tags']) ? $Parsedown->GetTags($file) : '') . '" href="/?page=' . $page . '" search="' . $page . '">' . $page . '</a>';
+                                        echo '<a class="' . (isset($chapter['tags']) ? $Parsedown->GetTags($file) : '') . '" href="/?page=' . $page . '" search="' . $page . '">' . $Parsedown->PageTitle($file) . '</a>';
                                     }
 
                                     echo '</li>';

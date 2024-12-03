@@ -10,7 +10,7 @@
         private $baseImagePath = 'https://wiki.facepunch.com/';
         public $config;
         public $categories;
-        protected $lua_keywords = array('and', 'break', 'do', 'else', 'elseif', 'end', 'false', 'for', 'function', 'if', 'in', 'local', 'nil', 'not', 'or', 'repeat', 'return', 'then', 'true', 'until', 'while');
+        protected $lua_keywords = array('and', 'break', 'do', 'else', 'elseif', 'end', 'false', 'for', 'function', 'if', 'in', 'local', 'nil', 'not', 'or', 'repeat', 'return', 'then', 'true', 'until', 'while', 'continue');
         protected $cpp_keywords = array(
             'alignas', 'alignof', 'and', 'and_eq', 'asm', 'auto',
             'bitand', 'bitor', 'bool', 'break', 'case', 'catch', 'char', 'char16_t', 'char32_t', 'class', 'compl', 'const', 'constexpr', 'const_cast', 'continue',
@@ -68,19 +68,31 @@
         function SafeLink($url) {
             $url = str_replace('*', '', $url); // Removes all *
             $url = str_replace(' ', '_', $url); // Removes all *
+            $url = strtolower($url);
+            $url = str_replace(['../', './'], '', $url);
+            $url = preg_replace('/[^a-z0-9_\-]/', '', $url);
 
             return $url;
         }
 
-        function PageTitle($text)
+        function PageTitle($text, $fullName = NULL)
         {
             $title = $this->config['name'];
             if (preg_match('/<title>(.*?)<\/title>/', $text, $matches)) {
                 $title = $matches[1];
             }
 
-            if (preg_match('/<function name="([^"]+)" parent="([^"]+)" type="([^"]+)">([\s\S]+?)<\/function>/s', $text, $matches)) {
-                 $title = $matches[1];
+            if (preg_match('/<function name="([^"]+)" parent="([^"]*)" type="([^"]+)">([\s\S]+?)<\/function>/s', $text, $matches)) {
+                if (isset($fullName))
+                {
+                    if($matches[3] == 'classfunc' && $this->config['code_language'] == 'lua') {
+                        $title = $matches[2] . ':' . $matches[1];
+                    } else {
+                        $title = $matches[2] . $this->config['code_funcseparator'] . $matches[1];
+                    }
+                } else {
+                       $title = $matches[1];
+                   }
             }
 
             if (preg_match('/<type name="([^"]+)" category="([^"]+)" is="([^"]+)">([\s\S]+?)<\/type>/s', $text, $matches)) {
@@ -90,31 +102,17 @@
             return $title;
         }
 
-        function ClassPageTitle($text)
-        {
-            $title = $this->config['name'];
-            if (preg_match('/<title>(.*?)<\/title>/', $text, $matches)) {
-                $title = $matches[1];
-            }
-
-            if (preg_match('/<function name="([^"]+)" parent="([^"]+)" type="([^"]+)">([\s\S]+?)<\/function>/s', $text, $matches)) {
-                if($matches[3] == 'classfunc') {
-                    $title = $matches[2] . ':' . $matches[1];
-                } else {
-                    $title = $matches[1];
-                }
-            }
-
-            return $title;
-        }
-
         function GetTags($text)
         {
             $tags = '';
-            if (preg_match('/<function name="([^"]+)" parent="([^"]+)" type="([^"]+)">([\s\S]+?)<\/function>/s', $text, $matches)) {
+            if (preg_match('/<function name="([^"]+)" parent="([^"]*)" type="([^"]+)">([\s\S]+?)<\/function>/s', $text, $matches)) {
                 if (isset($matches[3]) && $matches[3] != '') {
-                    if ($matches[3] == 'classfunc') {
-                        $tags .= 'cm f method member';
+                    if ($matches[3] == 'classfunc' || $matches[3] == 'libraryfunc') {
+                        $tags .= 'cm f meth memb';
+                    }
+
+                    if ($matches[3] == 'hook') {
+                        $tags .= 'cm event f meth memb';
                     }
                 }
 
@@ -161,7 +159,7 @@
 
         function LableRealm($text) 
         {
-            if (preg_match('/<function name="([^"]+)" parent="([^"]+)" type="([^"]+)">([\s\S]+?)<\/function>/s', $text, $matches)) {
+            if (preg_match('/<function name="([^"]+)" parent="([^"]*)" type="([^"]+)">([\s\S]+?)<\/function>/s', $text, $matches)) {
                 if (preg_match('/<realm>(.*?)<\/realm>/s', $text, $matches2)) {
                     $realm = $matches2[1];
 
@@ -188,7 +186,7 @@
 
         function FuncData($text) 
         {
-            if (preg_match('/<function name="([^"]+)" parent="([^"]+)" type="([^"]+)">([\s\S]+?)<\/function>/s', $text, $matches)) {
+            if (preg_match('/<function name="([^"]+)" parent="([^"]*)" type="([^"]+)">([\s\S]+?)<\/function>/s', $text, $matches)) {
                 $function = array();
                 $function['name'] = $matches[1];
                 $function['parent'] = $matches[2];
@@ -251,6 +249,26 @@
 
             return $Block;
         }
+
+        protected function getFunctionName($func)
+           {
+               if (!isset($func['parent']))
+                   return $func['name'];
+
+               $outPut = $func['parent'];
+
+               if (isset($func['type']) && $func['type'] == 'libraryfunc')
+                   $outPut .= '.';
+               else if (isset($func['type']) && $func['type'] == 'hook')
+                   $outPut = '(hook) ' . ((strlen($func['parent']) != 0) ? ($outPut . ':') : '');
+               else
+                   $outPut .= $this->config['code_funcseparator'];
+
+               $outPut .= $func['name'];
+
+               return $outPut;
+           }
+
         protected function buildFunction($func)
         {
             $html = '<div class="function ' . $func['type'] . ' ' . $func['realm'] . '">';
@@ -296,9 +314,9 @@
                             #}
                         }
 
-                        $html .= $rets . ' ' . (isset($func['parent']) ? $func['parent'] . $this->config['code_funcseparator'] : '') . $func['name'] . '(' . $args .' )';
+                        $html .= $rets . ' ' . $this->getFunctionName($func) . '(' . $args .' )';
                     } else {
-                        $html .= ' ' . (isset($func['parent']) ? $func['parent'] . $this->config['code_funcseparator'] : '') .$func['name'] . "()";
+                        $html .= ' ' . $this->getFunctionName($func) . "()";
                     }
                 $html .= '</div>';
 
@@ -426,9 +444,9 @@
                                             $rets .= ' ' . '<a class="link-page ' . ($this->FindFile($ret['type']) != null ? 'exists' : 'missing') . '" href="/?page=' . $this->SafeLink($ret['type']) . '">' . $ret['type'] . '</a>';
                                         }
 
-                                        $html .= $rets . ' ' . (isset($func['parent']) ? $func['parent'] . $this->config['code_funcseparator'] : '') . $func['name'] . '(' . $args .' )';
+                                        $html .= $rets . ' ' . $this->getFunctionName($func) . '(' . $args .' )';
                                     } else {
-                                        $html .= (isset($func['parent']) ? $func['parent'] . $this->config['code_funcseparator'] : '') . $func['name'] . "()";
+                                        $html .= $this->getFunctionName($func) . "()";
                                     }
                                     $html .= '<div class="summary">';
                                         $html .= $func['desc'];
@@ -564,7 +582,7 @@
             $html = '<a class="link-page ' . (isset($file) ? 'exists' : 'missing') . '" href="';
             $html .= "/?page=" . $page;
             $html .= '">';
-                $html .= isset($name) && $name != '' ? $name : $page;
+                $html .= isset($name) && $name != '' ? $name : $this->PageTitle(file_get_contents($file), true);
             $html .= '</a>';
 
             return $html;
@@ -576,7 +594,7 @@
 
             $html = '<div class="ambig">';
                 $html .= '<div class="target">';
-                    $html .= '<a class="link-page ' . (isset($file) ? 'exists' : 'missing') . '" href="/?page=' . $page . '">' . (isset($file) ? $this->ClassPageTitle(file_get_contents($file)) : $page) . '</a>';
+                    $html .= '<a class="link-page ' . (isset($file) ? 'exists' : 'missing') . '" href="/?page=' . $page . '">' . (isset($file) ? $this->PageTitle(file_get_contents($file), true) : $page) . '</a>';
                 $html .= '</div>';
                 $html .= '<div class="desc">';
                     $html .= $text;
@@ -722,7 +740,7 @@
             }
 
             $text = implode("\n", $lines);
-            //$text = preg_replace('/(?<!^#)\s{2}$/m', '<br>', $text); // Add <br> tag at the end of lines with two spaces
+            $text = preg_replace('/`(.*?)`/', '<code>$1</code>', $text);
 
             if (preg_match_all('/<note>(.*?)<\/note>/s', $text, $matches, PREG_SET_ORDER)) {
                 foreach ($matches as $match) {
@@ -780,7 +798,7 @@
 
             if (preg_match_all('/<ambig\s+page="([^"]+)">(.*?)<\/ambig>/s', $text, $matches, PREG_SET_ORDER)) {
                 foreach ($matches as $match) {
-                    if (preg_match('/<function name="([^"]+)" parent="([^"]+)" type="([^"]+)">([\s\S]+?)<\/function>/s', $text, $_)) {
+                    if (preg_match('/<function name="([^"]+)" parent="([^"]*)" type="([^"]+)">([\s\S]+?)<\/function>/s', $text, $_)) {
                         $markup .= $this->buildAmbig($match[2], $match[1]);
                     }
                     $text = str_replace('<ambig page="' . $match[1] . '">' . $match[2] . '</ambig>', $this->buildAmbig($match[2], $match[1]), $text);
@@ -811,7 +829,7 @@
             }
 
             $special = false;
-            if (preg_match('/<function name="([^"]+)" parent="([^"]+)" type="([^"]+)">([\s\S]+?)<\/function>/s', $text, $matches)) {
+            if (preg_match('/<function name="([^"]+)" parent="([^"]*)" type="([^"]+)">([\s\S]+?)<\/function>/s', $text, $matches)) {
                 $special = true;
                 $function = array();
                 $function['name'] = $matches[1];
@@ -913,6 +931,8 @@
             {
                 $title = $matches[1];
             }
+
+            #$text = preg_replace('/(?<!^#)\s{2}$/m', '<br>', $text); // Add <br> tag at the end of lines with two spaces
 
             return $markup;
         }
