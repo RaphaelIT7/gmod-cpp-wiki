@@ -41,6 +41,9 @@
                 foreach ($category['categories'] as &$chapter) {
                     $shortpath = $this->config['pages_path'] . $chapter['path'] . '/';
                     $path = $shortpath  . $file . '.md';
+                    
+                    if (!file_exists($shortpath))
+                        continue;
 
                     $files = array_diff(scandir($shortpath), array('..', '.'));
                     foreach($files as $file2) {
@@ -95,7 +98,7 @@
                    }
             }
 
-            if (preg_match('/<type name="([^"]+)" category="([^"]+)" is="([^"]+)">([\s\S]+?)<\/type>/s', $text, $matches)) {
+            if (preg_match('/<type name="([^"]+)" category="([^"]*)" is="([^"]+)">([\s\S]+?)<\/type>/s', $text, $matches)) {
                 $title = $matches[1];
             }
 
@@ -230,7 +233,7 @@
         {
             $image = parent::inlineImage($excerpt);
 
-            if ( ! isset($image))
+            if (!isset($image))
             {
                 return null;
             }
@@ -316,7 +319,7 @@
 
                         $html .= $rets . ' ' . $this->getFunctionName($func) . '(' . $args .' )';
                     } else {
-                        $html .= ' ' . $this->getFunctionName($func) . "()";
+                        $html .= ' ' . $this->getFunctionName($func) . ($func['type'] == 'libraryfield') ? '' : "()";
                     }
                 $html .= '</div>';
 
@@ -355,7 +358,7 @@
                                 $html .= '<span class="default"> = ' . $arg['default'] . '</span>';
                             }
                             $html .= '<div class="numbertagindent">';
-                                $html .= $arg['desc'];
+                                $html .= $this->text($arg['desc']);
                             $html .= '</div>';
                         $html .= '</div>';
                     }
@@ -378,7 +381,7 @@
                                 $html .= '<span class="default"> = ' . $arg['default'] . '</span>';
                             }
                             $html .= '<div class="numbertagindent">';
-                                $html .= $arg['desc'];
+                                $html .= $this->text($arg['desc']);
                             $html .= '</div>';
                         $html .= '</div>';
                     }
@@ -668,6 +671,27 @@
             return $html;
         }
 
+        protected function buildCallback($text)
+        {
+            $html = '<div class="callback_args">';
+            	$html .= 'Function argument(s): ';
+                $args = $this->GetStuff($text, 'callback', 'arg');
+                $idx = 0;
+                foreach($args as $arg)
+                {
+                	$idx = $idx + 1;
+                	$html .= '<div>';
+                		$html .= '<span class="numbertag">' . $idx . '</span>';
+                		$html .= '<a class="link-page ' . ($this->FindFile($arg['type']) != null ? 'exists' : 'missing') . '" href="/?page=' . $this->SafeLink($arg['type']) . '">' . $arg['type'] . '</a>';
+                        $html .= '<strong> ' . $arg['name'] . '</strong>';
+                        $html .= ' - ' . $this->text($arg['desc']);
+                	$html .= '</div>';
+                }
+            $html .= '</div>';
+
+            return $html;
+        }
+
         function getrealm($realm) 
         {
             $data = array();
@@ -750,7 +774,7 @@
 
             if (preg_match_all('/<warning>(.*?)<\/warning>/', $text, $matches, PREG_SET_ORDER)) {
                 foreach ($matches as $match) {
-                    $text = str_replace('<warning>' . $match[1] . '</interwarningnal>', $this->buildWarning($match[1]), $text);
+                    $text = str_replace('<warning>' . $match[1] . '</warning>', $this->buildWarning($match[1]), $text);
                 }
             }
 
@@ -811,6 +835,12 @@
                 }
             }
 
+            if (preg_match_all('/<callback>([\s\S]+?)<\/callback>/', $text, $matches, PREG_SET_ORDER)) {
+                foreach ($matches as $match) {
+                    $text = str_replace('<callback>' . $match[1] . '</callback>', $this->buildCallback($match[1]), $text);
+                }
+            }
+
             #if (preg_match_all('/```([a-zA-Z0-9_-]*)\n(.*?)\n```/s', $text, $matches, PREG_SET_ORDER)) {
                 #foreach ($matches as $match) {
                     #$text = str_replace('```' . $match[1] . '\n' . $match[2] . '```', $this->buildCode($match[1], $match[2]), $text);
@@ -866,7 +896,7 @@
                 $markup .= $this->buildFunction($function);
             }
 
-            if (preg_match('/<type name="([^"]+)" category="([^"]+)" is="([^"]+)">([\s\S]+?)<\/type>/s', $text, $matches)) {
+            if (preg_match('/<type name="([^"]+)" category="([^"]*)" is="([^"]+)">([\s\S]+?)<\/type>/s', $text, $matches)) {
                 $special = true;
                 $type = array();
                 $type['name'] = $matches[1];
@@ -931,6 +961,8 @@
             {
                 $title = $matches[1];
             }
+
+            $markup = preg_replace('!^<p>(.*?)</p>$!i', '$1', $markup);
 
             #$text = preg_replace('/(?<!^#)\s{2}$/m', '<br>', $text); // Add <br> tag at the end of lines with two spaces
 
